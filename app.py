@@ -62,16 +62,13 @@ def webhook():
         text = msg.get("text", "")
 
         if text == "/start":
-            invia_messaggio(chat_id, "👋 *Bet Tracker con Groq Attivo!*\n\n📸 *Inviami lo screenshot* di una schedina per registrarla.\n\n📋 *Comandi:*\n• `/attive` - Schedine in corso\n• `/bilancio` - Cassa e profitto")
+            invia_messaggio(chat_id, "👋 *Bet Tracker Ultra-Veloce Attivo!*\n\n📸 *Inviami lo screenshot* di una schedina per registrarla.")
         elif text == "/attive":
             mostra_attive(chat_id)
         elif text == "/bilancio":
             mostra_bilancio(chat_id)
         elif "photo" in msg:
-            # 1. Risponde SUBITO a Telegram così l'utente non aspetta
-            invia_messaggio(chat_id, "🔍 Ricevuto! Elaborazione schedina in corso...")
-            
-            # 2. Avvia l'elaborazione pesante in background (senza bloccare Telegram)
+            invia_messaggio(chat_id, "⚡ Analisi rapida in corso...")
             file_id = msg["photo"][-1]["file_id"]
             thread = threading.Thread(target=elabora_screenshot_background, args=(chat_id, file_id))
             thread.start()
@@ -86,10 +83,17 @@ def elabora_screenshot_background(chat_id, file_id):
         file_path = file_res["result"]["file_path"]
         img_bytes = requests.get(f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}").content
         
+        # 🚀 TRUCCO VELOCITÀ: Ridimensiona e comprime l'immagine prima di inviarla a Groq
+        img = Image.open(io.BytesIO(img_bytes))
+        img.thumbnail((1024, 1024))  # Riduce i pixel massimi mantenendo la nitidezza del testo
+        output = io.BytesIO()
+        img.save(output, format="JPEG", quality=80) # Comprime in JPEG rapido
+        compressed_bytes = output.getvalue()
+
         import base64
-        base64_image = base64.b64encode(img_bytes).decode('utf-8')
+        base64_image = base64.b64encode(compressed_bytes).decode('utf-8')
         
-        prompt = 'Analizza questo screenshot di una schedina calcistica. Restituisci SOLO un oggetto JSON valido (senza blocchi di codice markdown o altri commenti) con questa esatta struttura: {"importo_giocato": 10.0, "vincita_potenziale": 50.0, "eventi": [{"squadra_casa": "Inter", "squadra_ospite": "Milan", "mercato": "Over 8.5 Corner", "quota": 1.80}]}. Normalizza i nomi delle squadre. Se importo o vincita non si leggono metti 0.'
+        prompt = 'Analizza questo screenshot di una schedina. Restituisci SOLO un JSON valido (senza markdown o altro testo) con questa struttura: {"importo_giocato": 10.0, "vincita_potenziale": 50.0, "eventi": [{"squadra_casa": "Inter", "squadra_ospite": "Milan", "mercato": "Over 8.5 Corner", "quota": 1.80}]}. Se importo o vincita non si leggono metti 0.'
 
         completion = groq_client.chat.completions.create(
             model="llama-3.2-90b-vision-preview",
@@ -108,7 +112,7 @@ def elabora_screenshot_background(chat_id, file_id):
                 }
             ],
             temperature=0.1,
-            max_tokens=1024,
+            max_tokens=300, # Ridotto per velocizzare la risposta dell'AI
         )
         
         raw_text = completion.choices[0].message.content.strip()
@@ -135,7 +139,7 @@ def elabora_screenshot_background(chat_id, file_id):
         conn.close()
         invia_messaggio(chat_id, riepilogo)
     except Exception as e:
-        invia_messaggio(chat_id, f"❌ Errore lettura con Groq: {e}")
+        invia_messaggio(chat_id, f"❌ Errore lettura rapida: {e}")
 
 @app.route("/check-live", methods=["GET"])
 def trigger_live():
@@ -221,7 +225,7 @@ def mostra_attive(chat_id):
     msg = "📋 *EVENTI IN CORSO:*\n\n"
     for r in righe:
         ic = "✅" if r[5] == "VINTA" else ("❌" if r[5] == "PERSA" else "⏳")
-        msg += f"{ic} *#{(r[0])}* | {r[1]}-{r[2]} (`{r[3]}`)\n   └ 📊 _{r[4]}_\n"
+        msg += f"{ic} *#{r[0]}* | {r[1]}-{r[2]} (`{r[3]}`)\n   └ 📊 _{r[4]}_\n"
     invia_messaggio(chat_id, msg)
 
 def mostra_bilancio(chat_id):
@@ -238,7 +242,4 @@ def mostra_bilancio(chat_id):
             v += cnt
         elif stato == "PERSA":
             p += cnt
-    invia_messaggio(chat_id, f"📊 *BILANCIO CASSA*\n\n✅ Vinte: *{v}* | ❌ Perse: *{p}*\n💸 Giocato: *{speso:.2f}€*\n💰 Incassato: *{vinto:.2f}€*\n📈 Profitto: *{(vinto - speso):.2f}€*")
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    invia_messaggio(chat_id, f"📊 *BILANCIO CASSA*\n\n✅ Vinte: *{v}* | ❌ Perse: *{p}*\n💸 Giocato: *{speso:.2f}€*\n💰 Incassato: *{vinto:.2f}€*\n📈 Profitto: *{(vinto - speso):.2f}€*
