@@ -87,7 +87,7 @@ def elabora_screenshot(chat_id, file_id):
         prompt = 'Analizza questo screenshot di una schedina calcistica. Restituisci SOLO un JSON valido con questa struttura: {"importo_giocato": 10.0, "vincita_potenziale": 50.0, "eventi": [{"squadra_casa": "Inter", "squadra_ospite": "Milan", "mercato": "Over 8.5 Corner", "quota": 1.80}]}. Normalizza i nomi delle squadre. Se importo o vincita non si leggono metti 0.'
         
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.8-flash',
             contents=[img, prompt],
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
@@ -150,7 +150,7 @@ def controlla_risultati_live():
         Stats: {json.dumps(stats)} | Eventi: {json.dumps(events)}
         Rispondi SOLO in JSON: {{"stato": "VINTA"|"PERSA"|"IN_CORSO", "riassunto": "es. 2-1 (70') | Corner: 9"}}"""
 
-        resp = client.models.generate_content(model='gemini-2.5-flash', contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
+        resp = client.models.generate_content(model='gemini-3.8-flash', contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
         verdetto = json.loads(resp.text)
 
         if verdetto["stato"] in ["VINTA", "PERSA"]:
