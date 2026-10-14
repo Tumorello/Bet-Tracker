@@ -6,19 +6,18 @@ from datetime import datetime
 from flask import Flask, request
 from PIL import Image
 import io
-from google import genai
-from google.genai import types
+from groq import Groq
 
 app = Flask(__name__)
 
 # ==========================================
-# 🔑 LE TUE 3 CHIAVI
+# 🔑 LE TUE CHIAVI (Groq + Telegram + Football)
 # ==========================================
 TELEGRAM_TOKEN = "8887911048:AAE47GwRRtZgfKJRNuemMNburSvbUIw3Xzk"
-GEMINI_API_KEY = "AQ.Ab8RN6KQVTDOccGD68YJK0x5y2EUdfehtH1akUb-szWjhWt4Cw"
+GROQ_API_KEY = "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"
 FOOTBALL_API_KEY = "ecc1dce996b099e002247afba8af1b44"
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+groq_client = Groq(api_key=GROQ_API_KEY)
 
 def init_db():
     conn = sqlite3.connect("scommesse.db")
@@ -62,13 +61,13 @@ def webhook():
         text = msg.get("text", "")
 
         if text == "/start":
-            invia_messaggio(chat_id, "👋 *Bet Tracker Cloud Attivo!*\n\n📸 *Inviami lo screenshot* di una schedina per registrarla.\n\n📋 *Comandi:*\n• `/attive` - Schedine in corso\n• `/bilancio` - Cassa e profitto")
+            invia_messaggio(chat_id, "👋 *Bet Tracker con Groq Attivo!*\n\n📸 *Inviami lo screenshot* di una schedina per registrarla.\n\n📋 *Comandi:*\n• `/attive` - Schedine in corso\n• `/bilancio` - Cassa e profitto")
         elif text == "/attive":
             mostra_attive(chat_id)
         elif text == "/bilancio":
             mostra_bilancio(chat_id)
         elif "photo" in msg:
-            invia_messaggio(chat_id, "🔍 Sto leggendo lo screenshot con l'AI...")
+            invia_messaggio(chat_id, "🔍 Sto leggendo lo screenshot con Groq (Llama Vision)...")
             file_id = msg["photo"][-1]["file_id"]
             elabora_screenshot(chat_id, file_id)
             
@@ -82,24 +81,38 @@ def elabora_screenshot(chat_id, file_id):
         file_path = file_res["result"]["file_path"]
         img_bytes = requests.get(f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}").content
         
-        img = Image.open(io.BytesIO(img_bytes))
-        prompt = 'Analizza questo screenshot di una schedina calcistica. Restituisci SOLO un JSON valido con questa struttura: {"importo_giocato": 10.0, "vincita_potenziale": 50.0, "eventi": [{"squadra_casa": "Inter", "squadra_ospite": "Milan", "mercato": "Over 8.5 Corner", "quota": 1.80}]}. Normalizza i nomi delle squadre. Se importo o vincita non si leggono metti 0.'
+        import base64
+        base64_image = base64.b64encode(img_bytes).decode('utf-8')
         
-        # Tentativi automatici in caso di sovraccarico temporaneo dei server Google
-        response = None
-        for tentativo in range(3):
-            try:
-                response = client.models.generate_content(
-                    model='gemini-3.8-flash',
-                    contents=[img, prompt],
-                    config=types.GenerateContentConfig(response_mime_type="application/json")
-                )
-                break
-            except Exception as e:
-                if tentativo == 2:
-                    raise e
+        prompt = 'Analizza questo screenshot di una schedina calcistica. Restituisci SOLO un oggetto JSON valido (senza blocchi di codice markdown o altri commenti) con questa esatta struttura: {"importo_giocato": 10.0, "vincita_potenziale": 50.0, "eventi": [{"squadra_casa": "Inter", "squadra_ospite": "Milan", "mercato": "Over 8.5 Corner", "quota": 1.80}]}. Normalizza i nomi delle squadre. Se importo o vincita non si leggono metti 0.'
 
-        dati = json.loads(response.text)
+        completion = groq_client.chat.completions.create(
+            model="llama-3.2-90b-vision-preview",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}"
+                            },
+                        },
+                    ],
+                }
+            ],
+            temperature=0.1,
+            max_tokens=1024,
+        )
+        
+        raw_text = completion.choices[0].message.content.strip()
+        if raw_text.startswith("```json"):
+            raw_text = raw_text[7:]
+        if raw_text.endswith("```"):
+            raw_text = raw_text[:-3]
+            
+        dati = json.loads(raw_text.strip())
         
         conn = sqlite3.connect("scommesse.db")
         c = conn.cursor()
@@ -117,7 +130,7 @@ def elabora_screenshot(chat_id, file_id):
         conn.close()
         invia_messaggio(chat_id, riepilogo)
     except Exception as e:
-        invia_messaggio(chat_id, f"❌ Errore lettura: {e}")
+        invia_messaggio(chat_id, f"❌ Errore lettura con Groq: {e}")
 
 @app.route("/check-live", methods=["GET"])
 def trigger_live():
@@ -158,8 +171,16 @@ def controlla_risultati_live():
         Rispondi SOLO in JSON: {{"stato": "VINTA"|"PERSA"|"IN_CORSO", "riassunto": "es. 2-1 (70') | Corner: 9"}}"""
 
         try:
-            resp = client.models.generate_content(model='gemini-3.8-flash', contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
-            verdetto = json.loads(resp.text)
+            completion = groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=256,
+            )
+            raw_v = completion.choices[0].message.content.strip()
+            if raw_v.startswith("```json"): raw_v = raw_v[7:]
+            if raw_v.endswith("```"): raw_v = raw_v[:-3]
+            verdetto = json.loads(raw_v.strip())
 
             if verdetto["stato"] in ["VINTA", "PERSA"]:
                 c.execute("UPDATE eventi SET stato=?, ultimo_risultato=? WHERE id=?", (verdetto["stato"], verdetto["riassunto"], ev_id))
