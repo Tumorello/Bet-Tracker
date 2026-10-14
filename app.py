@@ -11,9 +11,9 @@ from groq import Groq
 app = Flask(__name__)
 
 # ==========================================
-# 🔑 LE TUE CHIAVI (Groq + Telegram + Football)
+# 🔑 LE TUE CHIAVI (Nuovo Bot Telegram + Groq + Football)
 # ==========================================
-TELEGRAM_TOKEN = "8887911048:AAE47GwRRtZgfKJRNuemMNburSvbUIw3Xzk"
+TELEGRAM_TOKEN = "8944836949:AAFY86iWBw5vFiChpeLRayVNipnLEbGeG9E"
 GROQ_API_KEY = "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"
 FOOTBALL_API_KEY = "ecc1dce996b099e002247afba8af1b44"
 
@@ -67,7 +67,7 @@ def webhook():
         elif text == "/bilancio":
             mostra_bilancio(chat_id)
         elif "photo" in msg:
-            invia_messaggio(chat_id, "🔍 Sto leggendo lo screenshot con Groq (Llama Vision)...")
+            invia_messaggio(chat_id, "🔍 Ricevuto! Elaborazione schedina in corso...")
             file_id = msg["photo"][-1]["file_id"]
             elabora_screenshot(chat_id, file_id)
             
