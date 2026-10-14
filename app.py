@@ -62,7 +62,7 @@ def webhook():
         text = msg.get("text", "")
 
         if text == "/start":
-            invia_messaggio(chat_id, "👋 *Bet Tracker Python Cloud Attivo!*\n\n📸 *Inviami lo screenshot* di una schedina per registrarla.\n\n📋 *Comandi:*\n• `/attive` - Schedine in corso\n• `/bilancio` - Cassa e profitto")
+            invia_messaggio(chat_id, "👋 *Bet Tracker Cloud Attivo!*\n\n📸 *Inviami lo screenshot* di una schedina per registrarla.\n\n📋 *Comandi:*\n• `/attive` - Schedine in corso\n• `/bilancio` - Cassa e profitto")
         elif text == "/attive":
             mostra_attive(chat_id)
         elif text == "/bilancio":
@@ -78,7 +78,6 @@ def webhook():
 
 def elabora_screenshot(chat_id, file_id):
     try:
-        # Prende il file da Telegram
         file_res = requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getFile?file_id={file_id}").json()
         file_path = file_res["result"]["file_path"]
         img_bytes = requests.get(f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}").content
@@ -86,11 +85,20 @@ def elabora_screenshot(chat_id, file_id):
         img = Image.open(io.BytesIO(img_bytes))
         prompt = 'Analizza questo screenshot di una schedina calcistica. Restituisci SOLO un JSON valido con questa struttura: {"importo_giocato": 10.0, "vincita_potenziale": 50.0, "eventi": [{"squadra_casa": "Inter", "squadra_ospite": "Milan", "mercato": "Over 8.5 Corner", "quota": 1.80}]}. Normalizza i nomi delle squadre. Se importo o vincita non si leggono metti 0.'
         
-        response = client.models.generate_content(
-            model='gemini-1.5-flash',
-            contents=[img, prompt],
-            config=types.GenerateContentConfig(response_mime_type="application/json")
-        )
+        # Tentativi automatici in caso di sovraccarico temporaneo dei server Google
+        response = None
+        for tentativo in range(3):
+            try:
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=[img, prompt],
+                    config=types.GenerateContentConfig(response_mime_type="application/json")
+                )
+                break
+            except Exception as e:
+                if tentativo == 2:
+                    raise e
+
         dati = json.loads(response.text)
         
         conn = sqlite3.connect("scommesse.db")
@@ -113,7 +121,6 @@ def elabora_screenshot(chat_id, file_id):
 
 @app.route("/check-live", methods=["GET"])
 def trigger_live():
-    """Rotta che verrà richiamata ogni 10 minuti per controllare i risultati live"""
     controlla_risultati_live()
     return "Controllo live eseguito", 200
 
@@ -150,16 +157,18 @@ def controlla_risultati_live():
         Stats: {json.dumps(stats)} | Eventi: {json.dumps(events)}
         Rispondi SOLO in JSON: {{"stato": "VINTA"|"PERSA"|"IN_CORSO", "riassunto": "es. 2-1 (70') | Corner: 9"}}"""
 
-        resp = client.models.generate_content(model='gemini-1.5-flash', contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
-        verdetto = json.loads(resp.text)
+        try:
+            resp = client.models.generate_content(model='gemini-2.5-flash', contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
+            verdetto = json.loads(resp.text)
 
-        if verdetto["stato"] in ["VINTA", "PERSA"]:
-            c.execute("UPDATE eventi SET stato=?, ultimo_risultato=? WHERE id=?", (verdetto["stato"], verdetto["riassunto"], ev_id))
-            conn.commit()
-            ic = "✅ *EVENTO PRESO!*" if verdetto["stato"] == "VINTA" else "❌ *EVENTO SALTATO!*"
-            invia_messaggio(chat_id, f"{ic}\n🎟 Schedina #{s_id}\n⚽ *{casa} - {ospite}*\n🎯 `{mercato}`\n📊 Live: _{verdetto['riassunto']}_")
+            if verdetto["stato"] in ["VINTA", "PERSA"]:
+                c.execute("UPDATE eventi SET stato=?, ultimo_risultato=? WHERE id=?", (verdetto["stato"], verdetto["riassunto"], ev_id))
+                conn.commit()
+                ic = "✅ *EVENTO PRESO!*" if verdetto["stato"] == "VINTA" else "❌ *EVENTO SALTATO!*"
+                invia_messaggio(chat_id, f"{ic}\n🎟 Schedina #{s_id}\n⚽ *{casa} - {ospite}*\n🎯 `{mercato}`\n📊 Live: _{verdetto['riassunto']}_")
+        except Exception:
+            continue
 
-    # Controlla stato schedine
     c.execute("SELECT id, chat_id FROM schedine WHERE stato='IN_CORSO'")
     for s_id, chat_id in c.fetchall():
         c.execute("SELECT stato FROM eventi WHERE schedina_id=?", (s_id,))
