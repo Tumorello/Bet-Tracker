@@ -6,12 +6,13 @@ from datetime import datetime
 from flask import Flask, request
 from PIL import Image
 import io
+import threading
 from groq import Groq
 
 app = Flask(__name__)
 
 # ==========================================
-# 🔑 LE TUE CHIAVI (Nuovo Bot Telegram + Groq + Football)
+# 🔑 LE TUE CHIAVI
 # ==========================================
 TELEGRAM_TOKEN = "8944836949:AAFY86iWBw5vFiChpeLRayVNipnLEbGeG9E"
 GROQ_API_KEY = "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"
@@ -67,15 +68,19 @@ def webhook():
         elif text == "/bilancio":
             mostra_bilancio(chat_id)
         elif "photo" in msg:
+            # 1. Risponde SUBITO a Telegram così l'utente non aspetta
             invia_messaggio(chat_id, "🔍 Ricevuto! Elaborazione schedina in corso...")
+            
+            # 2. Avvia l'elaborazione pesante in background (senza bloccare Telegram)
             file_id = msg["photo"][-1]["file_id"]
-            elabora_screenshot(chat_id, file_id)
+            thread = threading.Thread(target=elabora_screenshot_background, args=(chat_id, file_id))
+            thread.start()
             
     except Exception as e:
         print(f"Errore webhook: {e}")
     return "OK", 200
 
-def elabora_screenshot(chat_id, file_id):
+def elabora_screenshot_background(chat_id, file_id):
     try:
         file_res = requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getFile?file_id={file_id}").json()
         file_path = file_res["result"]["file_path"]
@@ -216,7 +221,7 @@ def mostra_attive(chat_id):
     msg = "📋 *EVENTI IN CORSO:*\n\n"
     for r in righe:
         ic = "✅" if r[5] == "VINTA" else ("❌" if r[5] == "PERSA" else "⏳")
-        msg += f"{ic} *#{r[0]}* | {r[1]}-{r[2]} (`{r[3]}`)\n   └ 📊 _{r[4]}_\n"
+        msg += f"{ic} *#{(r[0])}* | {r[1]}-{r[2]} (`{r[3]}`)\n   └ 📊 _{r[4]}_\n"
     invia_messaggio(chat_id, msg)
 
 def mostra_bilancio(chat_id):
