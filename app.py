@@ -90,7 +90,7 @@ def elabora_screenshot(chat_id, file_id):
         for tentativo in range(3):
             try:
                 response = client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model='gemini-3.8-flash',
                     contents=[img, prompt],
                     config=types.GenerateContentConfig(response_mime_type="application/json")
                 )
@@ -158,7 +158,7 @@ def controlla_risultati_live():
         Rispondi SOLO in JSON: {{"stato": "VINTA"|"PERSA"|"IN_CORSO", "riassunto": "es. 2-1 (70') | Corner: 9"}}"""
 
         try:
-            resp = client.models.generate_content(model='gemini-2.5-flash', contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
+            resp = client.models.generate_content(model='gemini-3.8-flash', contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
             verdetto = json.loads(resp.text)
 
             if verdetto["stato"] in ["VINTA", "PERSA"]:
