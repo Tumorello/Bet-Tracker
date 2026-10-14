@@ -1,5 +1,5 @@
 flask
 requests
 pillow
-google-genai
+groq
 gunicorn
